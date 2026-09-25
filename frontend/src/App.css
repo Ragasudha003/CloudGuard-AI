@@ -1,0 +1,690 @@
+/* =========================================================
+   CLOUDGUARD AI - CLEAN CSS
+========================================================= */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f4f6fb;
+  color: #111827;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+/* =========================================================
+   LOGIN
+========================================================= */
+
+.login-page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 25px;
+  background: linear-gradient(
+    135deg,
+    #20245d,
+    #4038a8
+  );
+}
+
+.login-card {
+  width: 420px;
+  max-width: 100%;
+  background: white;
+  border-radius: 22px;
+  padding: 42px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+
+.login-icon {
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 22px;
+  border-radius: 18px;
+  background: #5146e5;
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 36px;
+}
+
+.login-card h1 {
+  color: #111827;
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+.login-subtitle {
+  color: #58708f;
+  font-size: 17px;
+  margin-bottom: 32px;
+}
+
+.field {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.field label {
+  display: block;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.field input,
+.field select {
+  display: block;
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #111827;
+  outline: none;
+  font-size: 15px;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: #5146e5;
+  box-shadow: 0 0 0 3px rgba(81, 70, 229, 0.12);
+}
+
+.login-footer {
+  margin-top: 28px;
+  color: #8491a6;
+  font-size: 14px;
+}
+
+/* =========================================================
+   APP SHELL
+========================================================= */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: #f4f6fb;
+}
+
+/* =========================================================
+   SIDEBAR
+========================================================= */
+
+.sidebar {
+  width: 250px;
+  min-width: 250px;
+  min-height: 100vh;
+  padding: 25px 16px;
+  background: #101827;
+  color: white;
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 10px 32px;
+  color: white;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.brand span:first-child {
+  font-size: 23px;
+}
+
+.sidebar-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-button {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 15px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: #f8fafc;
+  text-align: left;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.sidebar-button:hover {
+  background: #1e293b;
+}
+
+.sidebar-button.selected {
+  background: #5146e5;
+}
+
+.sidebar-button.logout {
+  margin-top: 20px;
+}
+
+.sidebar-icon {
+  width: 23px;
+  text-align: center;
+}
+
+/* =========================================================
+   MAIN
+========================================================= */
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
+  padding: 25px 30px 50px;
+}
+
+.header {
+  min-height: 72px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.header h1 {
+  color: #111827;
+  font-size: 29px;
+}
+
+.header p {
+  color: #58708f;
+  margin-top: 7px;
+  font-size: 16px;
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #5146e5;
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 700;
+}
+
+.profile strong,
+.profile span {
+  display: block;
+}
+
+.profile span {
+  color: #58708f;
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
+
+.page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 25px;
+}
+
+.page-heading h2 {
+  color: #111827;
+  font-size: 29px;
+}
+
+.page-heading p {
+  color: #58708f;
+  margin-top: 8px;
+  font-size: 17px;
+}
+
+.connection {
+  color: #16a34a;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.button {
+  min-height: 45px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary {
+  background: #5146e5;
+  color: white;
+}
+
+.primary:hover {
+  background: #4338ca;
+}
+
+.full {
+  width: 100%;
+}
+
+/* =========================================================
+   STATS
+========================================================= */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 15px;
+  padding: 23px;
+  min-height: 135px;
+  text-align: center;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.07);
+}
+
+.stat-icon {
+  font-size: 30px;
+  margin-bottom: 10px;
+}
+
+.stat-title {
+  color: #58708f;
+  font-size: 14px;
+  margin-bottom: 7px;
+}
+
+.stat-value {
+  color: #111827;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   CARDS
+========================================================= */
+
+.card {
+  background: white;
+  border-radius: 15px;
+  padding: 25px;
+  margin-bottom: 22px;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.07);
+}
+
+.card h3 {
+  color: #111827;
+  font-size: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.muted {
+  color: #64748b;
+}
+
+.description {
+  margin-top: 7px;
+  margin-bottom: 22px;
+}
+
+.badge {
+  padding: 7px 12px;
+  border-radius: 20px;
+  background: #eef0ff;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
+
+.two-column {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+.dashboard-card {
+  background: white;
+  border-radius: 15px;
+  padding: 25px;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.07);
+  margin-bottom: 22px;
+}
+
+.system-status {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.empty {
+  text-align: center;
+  padding: 45px 20px;
+}
+
+.empty.small {
+  padding: 30px 15px;
+}
+
+.empty-icon {
+  font-size: 40px;
+  margin-bottom: 13px;
+}
+
+.empty h3 {
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.empty p {
+  color: #64748b;
+  line-height: 1.5;
+  max-width: 500px;
+  margin: 0 auto 18px;
+}
+
+.risk-card {
+  background: white;
+  border-radius: 15px;
+  padding: 25px;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.07);
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.risk-card h3 {
+  margin-bottom: 15px;
+}
+
+.risk-circle {
+  width: 135px;
+  height: 135px;
+  border: 9px solid #d8dee8;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px auto;
+  color: #94a3b8;
+  font-size: 42px;
+}
+
+.risk-card h4 {
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.risk-card p {
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* =========================================================
+   PROJECT FORM
+========================================================= */
+
+.project-form {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 10px 16px;
+}
+
+.create-button {
+  width: 280px;
+  margin-top: 4px;
+}
+
+.message {
+  padding: 12px 14px;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  font-size: 14px;
+}
+
+.message.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.message.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+/* =========================================================
+   PROJECT LIST
+========================================================= */
+
+.project-row {
+  display: grid;
+  grid-template-columns: 55px 1fr auto;
+  gap: 18px;
+  align-items: center;
+  padding: 20px 5px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.project-row:last-child {
+  border-bottom: none;
+}
+
+.project-box-icon {
+  width: 55px;
+  height: 55px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #eef0ff;
+  font-size: 26px;
+}
+
+.project-details h3 {
+  color: #111827;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.project-details p {
+  color: #55708f;
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.project-details span {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.project-status {
+  color: #16a34a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   PIPELINE
+========================================================= */
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+.pipeline-stage {
+  min-height: 155px;
+  background: #f8fafc;
+  border-radius: 11px;
+  padding: 18px 10px;
+  text-align: center;
+}
+
+.pipeline-number {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #5146e5;
+  color: white;
+  font-weight: 700;
+}
+
+.pipeline-stage h3 {
+  color: #111827;
+  font-size: 15px;
+  margin-bottom: 7px;
+}
+
+.pipeline-stage p {
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.not-started {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 1000px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    display: block;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    min-height: auto;
+  }
+
+  .sidebar-menu {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .main-area {
+    width: 100%;
+    padding: 20px 15px;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .stat-grid,
+  .project-form {
+    grid-template-columns: 1fr;
+  }
+
+  .create-button {
+    width: 100%;
+  }
+
+  .pipeline {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .project-row {
+    grid-template-columns: 50px 1fr;
+  }
+
+  .project-status {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 450px) {
+  .sidebar-menu {
+    grid-template-columns: 1fr;
+  }
+
+  .login-card {
+    padding: 30px 22px;
+  }
+}
