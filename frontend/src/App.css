@@ -1,5 +1,5 @@
 /* =========================================================
-   CLOUDGUARD AI - CLEAN CSS
+   GLOBAL
 ========================================================= */
 
 * {
@@ -34,15 +34,15 @@ select {
 .login-page {
   min-height: 100vh;
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 25px;
   background: linear-gradient(
     135deg,
     #20245d,
     #4038a8
   );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 25px;
 }
 
 .login-card {
@@ -51,8 +51,8 @@ select {
   background: white;
   border-radius: 22px;
   padding: 42px;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.22);
   text-align: center;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.22);
 }
 
 .login-icon {
@@ -87,6 +87,7 @@ select {
 
 .field label {
   display: block;
+  text-align: left;
   color: #111827;
   font-size: 15px;
   font-weight: 700;
@@ -95,9 +96,9 @@ select {
 
 .field input,
 .field select {
-  display: block;
   width: 100%;
   height: 46px;
+  display: block;
   padding: 0 14px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -120,13 +121,13 @@ select {
 }
 
 /* =========================================================
-   APP SHELL
+   APP
 ========================================================= */
 
 .app-shell {
-  display: flex;
   min-height: 100vh;
   width: 100%;
+  display: flex;
   background: #f4f6fb;
 }
 
@@ -233,6 +234,17 @@ select {
   gap: 12px;
 }
 
+.profile strong,
+.profile span {
+  display: block;
+}
+
+.profile span {
+  color: #58708f;
+  margin-top: 4px;
+  font-size: 14px;
+}
+
 .avatar {
   width: 48px;
   height: 48px;
@@ -243,17 +255,6 @@ select {
   justify-content: center;
   align-items: center;
   font-weight: 700;
-}
-
-.profile strong,
-.profile span {
-  display: block;
-}
-
-.profile span {
-  color: #58708f;
-  margin-top: 4px;
-  font-size: 14px;
 }
 
 /* =========================================================
@@ -291,7 +292,7 @@ select {
 }
 
 /* =========================================================
-   BUTTONS
+   BUTTON
 ========================================================= */
 
 .button {
@@ -310,6 +311,11 @@ select {
 
 .primary:hover {
   background: #4338ca;
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .full {
@@ -372,8 +378,8 @@ select {
 
 .card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 15px;
   margin-bottom: 18px;
 }
@@ -406,19 +412,6 @@ select {
   gap: 20px;
 }
 
-.dashboard-card {
-  background: white;
-  border-radius: 15px;
-  padding: 25px;
-  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.07);
-  margin-bottom: 22px;
-}
-
-.system-status {
-  color: #64748b;
-  font-size: 14px;
-}
-
 .empty {
   text-align: center;
   padding: 45px 20px;
@@ -441,7 +434,7 @@ select {
 .empty p {
   color: #64748b;
   line-height: 1.5;
-  max-width: 500px;
+  max-width: 550px;
   margin: 0 auto 18px;
 }
 
@@ -454,25 +447,22 @@ select {
   text-align: center;
 }
 
-.risk-card h3 {
-  margin-bottom: 15px;
-}
-
 .risk-circle {
   width: 135px;
   height: 135px;
-  border: 9px solid #d8dee8;
+  border: 9px solid #22c55e;
   border-radius: 50%;
+  margin: 20px auto;
   display: flex;
   justify-content: center;
   align-items: center;
-  margin: 20px auto;
-  color: #94a3b8;
-  font-size: 42px;
+  color: #111827;
+  font-size: 35px;
+  font-weight: 700;
 }
 
 .risk-card h4 {
-  color: #64748b;
+  color: #16a34a;
   margin-bottom: 10px;
 }
 
@@ -482,7 +472,7 @@ select {
 }
 
 /* =========================================================
-   PROJECT FORM
+   FORMS
 ========================================================= */
 
 .project-form {
@@ -493,7 +483,6 @@ select {
 
 .create-button {
   width: 280px;
-  margin-top: 4px;
 }
 
 .message {
@@ -514,7 +503,7 @@ select {
 }
 
 /* =========================================================
-   PROJECT LIST
+   PROJECTS
 ========================================================= */
 
 .project-row {
@@ -533,11 +522,11 @@ select {
 .project-box-icon {
   width: 55px;
   height: 55px;
+  border-radius: 12px;
+  background: #eef0ff;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  background: #eef0ff;
   font-size: 26px;
 }
 
@@ -565,8 +554,137 @@ select {
 }
 
 /* =========================================================
-   PIPELINE
+   SECURITY
 ========================================================= */
+
+.security-project-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.security-project-info div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.security-project-info strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.security-project-info span {
+  color: #64748b;
+}
+
+.security-low {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.security-warning {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.security-success {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px;
+  margin-bottom: 22px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.security-success-icon {
+  width: 45px;
+  height: 45px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #22c55e;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.security-success p {
+  color: #64748b;
+  margin-top: 5px;
+}
+
+.security-findings {
+  margin-bottom: 22px;
+}
+
+.security-findings > h3 {
+  margin-bottom: 15px;
+}
+
+.finding {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 17px;
+  margin-bottom: 10px;
+  border-radius: 9px;
+  background: #fef2f2;
+  border-left: 4px solid #ef4444;
+}
+
+.finding strong {
+  color: #111827;
+}
+
+.finding p {
+  margin-top: 5px;
+  color: #64748b;
+}
+
+.finding small {
+  display: block;
+  margin-top: 5px;
+  color: #94a3b8;
+}
+
+.finding-severity {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* =========================================================
+   BUILD PAGE
+========================================================= */
+
+.build-project {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.build-project h3 {
+  margin-bottom: 6px;
+}
+
+.build-project p {
+  color: #55708f;
+  word-break: break-all;
+}
+
+.pipeline-title {
+  margin-bottom: 20px;
+}
 
 .pipeline {
   display: grid;
@@ -575,11 +693,18 @@ select {
 }
 
 .pipeline-stage {
-  min-height: 155px;
-  background: #f8fafc;
-  border-radius: 11px;
+  min-height: 170px;
   padding: 18px 10px;
+  border-radius: 11px;
+  background: #f8fafc;
   text-align: center;
+  border: 1px solid #e2e8f0;
+}
+
+.pipeline-stage.ready,
+.pipeline-stage.completed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
 }
 
 .pipeline-number {
@@ -587,11 +712,11 @@ select {
   height: 40px;
   margin: 0 auto 12px;
   border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   background: #5146e5;
   color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 700;
 }
 
@@ -604,19 +729,120 @@ select {
 .pipeline-stage p {
   color: #64748b;
   font-size: 13px;
+  min-height: 35px;
   margin-bottom: 10px;
 }
 
-.not-started {
-  color: #94a3b8;
-  font-size: 12px;
+.pipeline-status {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 15px;
+  background: #eef0ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.build-summary {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.build-status-box {
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.build-status-box span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 7px;
+}
+
+.build-status-box strong {
+  color: #111827;
+  font-size: 17px;
+}
+
+.status-success {
+  color: #16a34a !important;
+}
+
+.status-failed {
+  color: #dc2626 !important;
+}
+
+.status-pending {
+  color: #64748b !important;
+}
+
+.build-section {
+  margin-bottom: 24px;
+}
+
+.build-section h3 {
+  margin-bottom: 12px;
+}
+
+.technology-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.technology-tag {
+  padding: 8px 12px;
+  background: #eef0ff;
+  color: #4338ca;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.detected-files {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.file-item {
+  padding: 11px 13px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.next-stage {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 18px;
+  margin-top: 20px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.next-stage p {
+  margin-top: 4px;
+  color: #64748b;
 }
 
 /* =========================================================
    RESPONSIVE
 ========================================================= */
 
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
+
   .stat-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -628,9 +854,14 @@ select {
   .pipeline {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  .build-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 800px) {
+
   .app-shell {
     display: block;
   }
@@ -657,7 +888,6 @@ select {
     gap: 15px;
   }
 
-  .stat-grid,
   .project-form {
     grid-template-columns: 1fr;
   }
@@ -667,24 +897,52 @@ select {
   }
 
   .pipeline {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .build-summary {
     grid-template-columns: 1fr 1fr;
   }
 
-  .project-row {
-    grid-template-columns: 50px 1fr;
+  .detected-files {
+    grid-template-columns: 1fr;
   }
 
-  .project-status {
-    grid-column: 2;
+  .build-project {
+    flex-direction: column;
+    align-items: flex-start;
   }
+
+  .security-project-info {
+    grid-template-columns: 1fr;
+  }
+
 }
 
-@media (max-width: 450px) {
+@media (max-width: 500px) {
+
   .sidebar-menu {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline {
+    grid-template-columns: 1fr;
+  }
+
+  .build-summary {
     grid-template-columns: 1fr;
   }
 
   .login-card {
     padding: 30px 22px;
+  }
+
+  .next-stage {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

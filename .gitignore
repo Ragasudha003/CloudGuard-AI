@@ -1,27 +1,175 @@
+# =========================================================
+# CLOUDGUARD AI - GITIGNORE
+# =========================================================
+
+# ---------------------------------------------------------
 # Python
+# ---------------------------------------------------------
+
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 
-# Virtual environment
+# Python virtual environments
+venv/
+.venv/
+env/
+ENV/
+
 backend/venv/
+backend/.venv/
 
-# SQLite database
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+
+# ---------------------------------------------------------
+# Databases
+# ---------------------------------------------------------
+
+# Local SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Explicit CloudGuard database files
 backend/cloudguard.db
+backend/*_backup.db
 
-# Node
+# Any database backup anywhere in project
+**/*_backup.db
+
+
+# ---------------------------------------------------------
+# Node / React / Vite
+# ---------------------------------------------------------
+
+node_modules/
 frontend/node_modules/
-frontend/dist/
 
-# Environment files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+frontend/dist/
+build/
+frontend/build/
+
+# Vite cache
+.vite/
+frontend/.vite/
+
+
+# ---------------------------------------------------------
+# Environment / Secrets
+# ---------------------------------------------------------
+
 .env
 .env.*
+*.env
 
-# IDE
+# Keep example environment files if you create them
+!.env.example
+!*.env.example
+
+
+# ---------------------------------------------------------
+# IDE / Editors
+# ---------------------------------------------------------
+
 .vscode/
 .idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
-# OS
+# VS Code local history
+.history/
+
+
+# ---------------------------------------------------------
+# Operating System
+# ---------------------------------------------------------
+
 .DS_Store
 Thumbs.db
+desktop.ini
+
+
+# ---------------------------------------------------------
+# Logs
+# ---------------------------------------------------------
+
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+
+
+# ---------------------------------------------------------
+# Temporary Files
+# ---------------------------------------------------------
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+
+
+# ---------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------
+
+coverage/
+.nyc_output/
+
+
+# ---------------------------------------------------------
+# Docker
+# ---------------------------------------------------------
+
+# Docker local override files
+docker-compose.override.yml
+
+# Local Docker environment files
+.env.docker
+
+
+# ---------------------------------------------------------
+# Terraform
+# ---------------------------------------------------------
+
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+
+
+# ---------------------------------------------------------
+# OS / Personal Files
+# ---------------------------------------------------------
+
+*.bak
+*.old
+*.orig
+
+
+# ---------------------------------------------------------
+# CloudGuard Local Backups
+# ---------------------------------------------------------
+
+cloudguard_backup.db
+backend/cloudguard_backup.db
+**/cloudguard_backup.db
