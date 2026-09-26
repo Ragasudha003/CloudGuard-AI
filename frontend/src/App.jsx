@@ -1,109 +1,264 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "/api";
+
+const TOKEN_KEY = "cloudguard_token";
+const USER_KEY = "cloudguard_user";
+
+/* =========================================================
+   AUTH HELPERS
+========================================================= */
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function getStoredUser() {
+  try {
+    const value = localStorage.getItem(USER_KEY);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(token, user) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+function clearSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+/* =========================================================
+   API HELPER
+========================================================= */
+
+async function apiFetch(url, options = {}) {
+  const token = getToken();
+
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return fetch(url, {
+    ...options,
+    headers,
+  });
+}
 
 /* =========================================================
    MAIN APP
 ========================================================= */
 
 function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [user, setUser] = useState(getStoredUser());
+  const [checkingSession, setCheckingSession] = useState(true);
   const [page, setPage] = useState("dashboard");
 
-  if (!loggedIn) {
+  useEffect(() => {
+    verifySession();
+  }, []);
+
+  async function verifySession() {
+    const token = getToken();
+
+    if (!token) {
+      setUser(null);
+      setCheckingSession(false);
+      return;
+    }
+
+    try {
+      const response = await apiFetch(`${API_URL}/me`);
+
+      if (!response.ok) {
+        throw new Error("Session invalid");
+      }
+
+      const data = await response.json();
+
+      setUser(data.user);
+
+      localStorage.setItem(
+        USER_KEY,
+        JSON.stringify(data.user)
+      );
+    } catch (error) {
+      console.error(error);
+      clearSession();
+      setUser(null);
+    } finally {
+      setCheckingSession(false);
+    }
+  }
+
+  function handleLoginSuccess(token, loggedUser) {
+    saveSession(token, loggedUser);
+    setUser(loggedUser);
+    setPage("dashboard");
+  }
+
+  async function handleLogout() {
+    try {
+      if (getToken()) {
+        await apiFetch(`${API_URL}/logout`, {
+          method: "POST",
+        });
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      clearSession();
+      setUser(null);
+      setPage("dashboard");
+    }
+  }
+
+  if (checkingSession) {
     return (
-      <Login
-        onLogin={() => setLoggedIn(true)}
+      <div className="login-page">
+        <div className="login-card">
+          <div className="login-icon">☁</div>
+
+          <h1>CloudGuard AI</h1>
+
+          <p className="login-subtitle">
+            Checking session...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <LoginPage
+        onLoginSuccess={handleLoginSuccess}
       />
     );
   }
 
   return (
     <div className="app-shell">
-
       <Sidebar
         page={page}
         setPage={setPage}
-        onLogout={() => {
-          setLoggedIn(false);
-          setPage("dashboard");
-        }}
+        onLogout={handleLogout}
       />
 
       <div className="main-area">
-
-        <Header />
+        <Header user={user} />
 
         {page === "dashboard" && (
           <Dashboard setPage={setPage} />
         )}
 
-        {page === "projects" && (
-          <ProjectsPage />
-        )}
+        {page === "projects" && <ProjectsPage />}
+
+        {page === "security" && <SecurityPage />}
+
+        {page === "pipeline" && <BuildPage />}
 
         {page === "deployments" && (
           <DeploymentsPage setPage={setPage} />
         )}
 
-        {page === "pipeline" && (
-          <BuildPage />
-        )}
+        {page === "monitoring" && <MonitoringPage />}
 
-        {page === "security" && (
-          <SecurityPage />
-        )}
+        {page === "logs" && <LogsPage />}
 
-        {page === "monitoring" && (
-          <MonitoringPage />
-        )}
-
-        {page === "logs" && (
-          <LogsPage />
-        )}
-
-        {page === "alerts" && (
-          <AlertsPage />
-        )}
-
+        {page === "alerts" && <AlertsPage />}
       </div>
     </div>
   );
 }
 
 /* =========================================================
-   LOGIN
+   LOGIN + REGISTER
 ========================================================= */
 
-function Login({ onLogin }) {
+function LoginPage({ onLoginSuccess }) {
+  const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  function submitLogin(event) {
+  const isRegister = mode === "register";
+
+  async function submitForm(event) {
     event.preventDefault();
 
+    setError("");
+
     if (!email.trim()) {
-      alert("Please enter your email.");
+      setError("Please enter your email.");
       return;
     }
 
     if (!password.trim()) {
-      alert("Please enter your password.");
+      setError("Please enter your password.");
       return;
     }
 
-    onLogin();
+    if (password.length < 6) {
+      setError(
+        "Password must contain at least 6 characters."
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const endpoint = isRegister
+        ? "/register"
+        : "/login";
+
+      const response = await fetch(
+        `${API_URL}${endpoint}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+            "Authentication failed."
+        );
+      }
+
+      onLoginSuccess(data.token, data.user);
+    } catch (error) {
+      console.error(error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="login-page">
-
       <div className="login-card">
-
-        <div className="login-icon">
-          ☁
-        </div>
+        <div className="login-icon">☁</div>
 
         <h1>CloudGuard AI</h1>
 
@@ -111,10 +266,46 @@ function Login({ onLogin }) {
           Intelligent DevSecOps Platform
         </p>
 
-        <form onSubmit={submitLogin}>
+        <div className="auth-tabs">
+          <button
+            type="button"
+            className={
+              mode === "login"
+                ? "auth-tab active"
+                : "auth-tab"
+            }
+            onClick={() => {
+              setMode("login");
+              setError("");
+            }}
+          >
+            Login
+          </button>
 
+          <button
+            type="button"
+            className={
+              mode === "register"
+                ? "auth-tab active"
+                : "auth-tab"
+            }
+            onClick={() => {
+              setMode("register");
+              setError("");
+            }}
+          >
+            Register
+          </button>
+        </div>
+
+        {error && (
+          <div className="message error">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={submitForm}>
           <div className="field">
-
             <label>Email</label>
 
             <input
@@ -124,12 +315,11 @@ function Login({ onLogin }) {
               onChange={(event) =>
                 setEmail(event.target.value)
               }
+              autoComplete="email"
             />
-
           </div>
 
           <div className="field">
-
             <label>Password</label>
 
             <input
@@ -139,23 +329,32 @@ function Login({ onLogin }) {
               onChange={(event) =>
                 setPassword(event.target.value)
               }
+              autoComplete={
+                isRegister
+                  ? "new-password"
+                  : "current-password"
+              }
             />
-
           </div>
 
           <button
             type="submit"
             className="button primary full"
+            disabled={loading}
           >
-            Login
+            {loading
+              ? isRegister
+                ? "Creating Account..."
+                : "Logging in..."
+              : isRegister
+                ? "Create Account"
+                : "Login"}
           </button>
-
         </form>
 
         <p className="login-footer">
           Secure Cloud Deployment & Monitoring
         </p>
-
       </div>
     </div>
   );
@@ -183,31 +382,31 @@ function Sidebar({
 
   return (
     <aside className="sidebar">
-
       <div className="brand">
         <span>☁</span>
         <span>CloudGuard</span>
       </div>
 
       <nav className="sidebar-menu">
+        {items.map(
+          ([id, icon, label]) => (
+            <button
+              key={id}
+              className={
+                page === id
+                  ? "sidebar-button selected"
+                  : "sidebar-button"
+              }
+              onClick={() => setPage(id)}
+            >
+              <span className="sidebar-icon">
+                {icon}
+              </span>
 
-        {items.map(([id, icon, label]) => (
-          <button
-            key={id}
-            className={
-              page === id
-                ? "sidebar-button selected"
-                : "sidebar-button"
-            }
-            onClick={() => setPage(id)}
-          >
-            <span className="sidebar-icon">
-              {icon}
-            </span>
-
-            <span>{label}</span>
-          </button>
-        ))}
+              <span>{label}</span>
+            </button>
+          )
+        )}
 
         <button
           className="sidebar-button logout"
@@ -219,7 +418,6 @@ function Sidebar({
 
           <span>Logout</span>
         </button>
-
       </nav>
     </aside>
   );
@@ -229,10 +427,13 @@ function Sidebar({
    HEADER
 ========================================================= */
 
-function Header() {
+function Header({ user }) {
+  const email = user?.email || "User";
+  const initial =
+    email.charAt(0).toUpperCase();
+
   return (
     <header className="header">
-
       <div>
         <h1>CloudGuard AI</h1>
 
@@ -242,19 +443,15 @@ function Header() {
       </div>
 
       <div className="profile">
-
         <div className="avatar">
-          S
+          {initial}
         </div>
 
         <div>
-          <strong>Admin</strong>
+          <strong>{email}</strong>
 
-          <span>
-            DevOps Engineer
-          </span>
+          <span>DevOps Engineer</span>
         </div>
-
       </div>
     </header>
   );
@@ -265,10 +462,20 @@ function Header() {
 ========================================================= */
 
 function Dashboard({ setPage }) {
-  const [projectCount, setProjectCount] = useState(0);
-  const [securityCount, setSecurityCount] = useState(0);
-  const [securityRisk, setSecurityRisk] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [projectCount, setProjectCount] =
+    useState(0);
+
+  const [securityCount, setSecurityCount] =
+    useState(0);
+
+  const [securityRisk, setSecurityRisk] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
 
   useEffect(() => {
     loadDashboard();
@@ -276,70 +483,82 @@ function Dashboard({ setPage }) {
 
   async function loadDashboard() {
     try {
-      const projectsResponse = await fetch(
-        `${API_URL}/projects`
-      );
+      setLoading(true);
 
-      if (projectsResponse.ok) {
-        const data =
-          await projectsResponse.json();
+      const projectResponse =
+        await apiFetch(
+          `${API_URL}/projects`
+        );
 
-        setProjectCount(
-          data.total_projects || 0
+      if (
+        projectResponse.status === 401
+      ) {
+        throw new Error(
+          "Your session has expired. Please log in again."
         );
       }
 
-      const securityResponse = await fetch(
-        `${API_URL}/security`
+      if (!projectResponse.ok) {
+        throw new Error(
+          "Could not load projects."
+        );
+      }
+
+      const projectData =
+        await projectResponse.json();
+
+      setProjectCount(
+        projectData.total_projects || 0
       );
 
+      const securityResponse =
+        await apiFetch(
+          `${API_URL}/security`
+        );
+
       if (securityResponse.ok) {
-        const data =
+        const securityData =
           await securityResponse.json();
 
         setSecurityCount(
-          data.security_issues || 0
+          securityData.security_issues || 0
         );
 
         setSecurityRisk(
-          data.risk_score
+          securityData.risk_score
         );
       }
-
     } catch (error) {
-
       console.error(error);
-
+      setError(error.message);
     } finally {
-
       setLoading(false);
-
     }
   }
 
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
           <h2>Dashboard</h2>
 
           <p>
             Welcome to CloudGuard AI
           </p>
-
         </div>
 
         <span className="connection">
           ● Backend Connected
         </span>
-
       </div>
 
-      <div className="stat-grid">
+      {error && (
+        <div className="message error">
+          {error}
+        </div>
+      )}
 
+      <div className="stat-grid">
         <StatCard
           icon="📁"
           title="Total Projects"
@@ -371,27 +590,19 @@ function Dashboard({ setPage }) {
           title="Applications"
           value="0"
         />
-
       </div>
 
       <div className="two-column">
-
         <section className="card">
-
           <div className="card-header">
-
-            <h3>
-              Application Status
-            </h3>
+            <h3>Application Status</h3>
 
             <span className="muted">
               No active applications
             </span>
-
           </div>
 
           <div className="empty">
-
             <div className="empty-icon">
               ☁️
             </div>
@@ -401,28 +612,23 @@ function Dashboard({ setPage }) {
             </h3>
 
             <p>
-              Build and deploy a project to see
-              its live status here.
+              Build and deploy a project
+              to see its live status here.
             </p>
 
             <button
               className="button primary"
               onClick={() =>
-                setPage("pipeline")
+                setPage("projects")
               }
             >
-              ⚙️ Go to Build
+              📁 Go to Projects
             </button>
-
           </div>
-
         </section>
 
         <section className="risk-card">
-
-          <h3>
-            Security Risk
-          </h3>
+          <h3>Security Risk</h3>
 
           <div className="risk-circle">
             {securityRisk === null
@@ -437,20 +643,15 @@ function Dashboard({ setPage }) {
           </h4>
 
           <p>
-            Current security risk from the
-            latest scan.
+            Current security risk from
+            your latest scan.
           </p>
-
         </section>
-
       </div>
 
       <div className="two-column">
-
         <section className="card">
-
           <div className="card-header">
-
             <h3>
               System Monitoring
             </h3>
@@ -458,27 +659,22 @@ function Dashboard({ setPage }) {
             <span className="muted">
               Waiting
             </span>
-
           </div>
 
           <div className="empty small">
-
             <div className="empty-icon">
               📈
             </div>
 
             <p>
-              No deployed application to monitor.
+              No deployed application
+              to monitor.
             </p>
-
           </div>
-
         </section>
 
         <section className="card">
-
           <div className="card-header">
-
             <h3>
               Recent Deployments
             </h3>
@@ -486,11 +682,9 @@ function Dashboard({ setPage }) {
             <span className="badge">
               0
             </span>
-
           </div>
 
           <div className="empty small">
-
             <div className="empty-icon">
               🚀
             </div>
@@ -498,13 +692,9 @@ function Dashboard({ setPage }) {
             <p>
               No deployments yet.
             </p>
-
           </div>
-
         </section>
-
       </div>
-
     </main>
   );
 }
@@ -520,7 +710,6 @@ function StatCard({
 }) {
   return (
     <div className="stat-card">
-
       <div className="stat-icon">
         {icon}
       </div>
@@ -532,7 +721,6 @@ function StatCard({
       <div className="stat-value">
         {value}
       </div>
-
     </div>
   );
 }
@@ -542,17 +730,32 @@ function StatCard({
 ========================================================= */
 
 function ProjectsPage() {
-  const [projects, setProjects] = useState([]);
+  const [projects, setProjects] =
+    useState([]);
 
-  const [name, setName] = useState("");
-  const [repository, setRepository] = useState("");
-  const [branch, setBranch] = useState("main");
+  const [name, setName] =
+    useState("");
+
+  const [repository, setRepository] =
+    useState("");
+
+  const [branch, setBranch] =
+    useState("main");
+
   const [environment, setEnvironment] =
     useState("Development");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [loading, setLoading] =
+    useState(true);
+
+  const [creating, setCreating] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
+    useState("");
 
   useEffect(() => {
     loadProjects();
@@ -560,14 +763,19 @@ function ProjectsPage() {
 
   async function loadProjects() {
     try {
+      setLoading(true);
+      setError("");
 
-      const response = await fetch(
-        `${API_URL}/projects`
-      );
+      const response =
+        await apiFetch(
+          `${API_URL}/projects`
+        );
 
       if (!response.ok) {
         throw new Error(
-          "Could not load projects."
+          response.status === 401
+            ? "Please log in again."
+            : "Could not load projects."
         );
       }
 
@@ -577,18 +785,15 @@ function ProjectsPage() {
       setProjects(
         data.projects || []
       );
-
     } catch (error) {
-
       console.error(error);
-
       setError(error.message);
-
+    } finally {
+      setLoading(false);
     }
   }
 
   async function createProject(event) {
-
     event.preventDefault();
 
     setError("");
@@ -609,36 +814,31 @@ function ProjectsPage() {
     }
 
     if (!branch.trim()) {
-      setError(
-        "Branch is required."
-      );
+      setError("Branch is required.");
       return;
     }
 
-    setLoading(true);
+    setCreating(true);
 
     try {
-
-      const response = await fetch(
-        `${API_URL}/projects`,
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify({
-            name: name.trim(),
-            repository:
-              repository.trim(),
-            branch:
-              branch.trim(),
-            environment,
-          }),
-        }
-      );
+      const response =
+        await apiFetch(
+          `${API_URL}/projects`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              name: name.trim(),
+              repository:
+                repository.trim(),
+              branch: branch.trim(),
+              environment,
+            }),
+          }
+        );
 
       const data =
         await response.json();
@@ -646,7 +846,7 @@ function ProjectsPage() {
       if (!response.ok) {
         throw new Error(
           data.detail ||
-          "Project creation failed."
+            "Project creation failed."
         );
       }
 
@@ -660,39 +860,27 @@ function ProjectsPage() {
       setEnvironment("Development");
 
       await loadProjects();
-
     } catch (error) {
-
       console.error(error);
-
       setError(error.message);
-
     } finally {
-
-      setLoading(false);
-
+      setCreating(false);
     }
   }
 
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
           <h2>Projects</h2>
 
           <p>
             Create and manage your applications
           </p>
-
         </div>
-
       </div>
 
       <section className="card">
-
         <h3>
           Create New Project
         </h3>
@@ -717,9 +905,7 @@ function ProjectsPage() {
           className="project-form"
           onSubmit={createProject}
         >
-
           <div className="field">
-
             <label>
               Project Name
             </label>
@@ -734,11 +920,9 @@ function ProjectsPage() {
                 )
               }
             />
-
           </div>
 
           <div className="field">
-
             <label>
               GitHub Repository
             </label>
@@ -753,11 +937,9 @@ function ProjectsPage() {
                 )
               }
             />
-
           </div>
 
           <div className="field">
-
             <label>
               Branch
             </label>
@@ -772,11 +954,9 @@ function ProjectsPage() {
                 )
               }
             />
-
           </div>
 
           <div className="field">
-
             <label>
               Environment
             </label>
@@ -789,7 +969,6 @@ function ProjectsPage() {
                 )
               }
             >
-
               <option value="Development">
                 Development
               </option>
@@ -805,43 +984,42 @@ function ProjectsPage() {
               <option value="Production">
                 Production
               </option>
-
             </select>
-
           </div>
 
           <button
             type="submit"
             className="button primary create-button"
-            disabled={loading}
+            disabled={creating}
           >
-            {loading
+            {creating
               ? "Creating..."
               : "+ Create Project"}
           </button>
-
         </form>
-
       </section>
 
       <section className="card">
-
         <div className="card-header">
-
-          <h3>
-            Your Projects
-          </h3>
+          <h3>Your Projects</h3>
 
           <span className="badge">
             {projects.length} Projects
           </span>
-
         </div>
 
-        {projects.length === 0 ? (
-
+        {loading ? (
           <div className="empty">
+            <div className="empty-icon">
+              🔄
+            </div>
 
+            <h3>
+              Loading projects...
+            </h3>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="empty">
             <div className="empty-icon">
               📁
             </div>
@@ -853,26 +1031,19 @@ function ProjectsPage() {
             <p>
               Create your first project above.
             </p>
-
           </div>
-
         ) : (
-
           <div>
-
             {projects.map((project) => (
-
               <div
                 className="project-row"
                 key={project.id}
               >
-
                 <div className="project-box-icon">
                   📦
                 </div>
 
                 <div className="project-details">
-
                   <h3>
                     {project.name}
                   </h3>
@@ -884,60 +1055,59 @@ function ProjectsPage() {
                   <span>
                     Branch: {project.branch}
                     {" • "}
-                    Environment:
-                    {" "}
+                    Environment:{" "}
                     {project.environment}
                   </span>
-
                 </div>
 
                 <div className="project-status">
                   ● {project.status}
                 </div>
-
               </div>
-
             ))}
-
           </div>
-
         )}
-
       </section>
-
     </main>
   );
 }
 
 /* =========================================================
-   SECURITY PAGE
+   SECURITY
 ========================================================= */
 
 function SecurityPage() {
-  const [projects, setProjects] = useState([]);
+  const [projects, setProjects] =
+    useState([]);
+
   const [selectedProject, setSelectedProject] =
     useState(null);
-  const [security, setSecurity] = useState(null);
 
-  const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
+  const [security, setSecurity] =
+    useState(null);
 
-  const [error, setError] = useState("");
+  const [loading, setLoading] =
+    useState(true);
+
+  const [scanning, setScanning] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
 
   useEffect(() => {
     loadProjects();
   }, []);
 
   async function loadProjects() {
-
     try {
-
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `${API_URL}/projects`
-      );
+      const response =
+        await apiFetch(
+          `${API_URL}/projects`
+        );
 
       if (!response.ok) {
         throw new Error(
@@ -954,37 +1124,26 @@ function SecurityPage() {
       setProjects(list);
 
       if (list.length > 0) {
-
-        const first =
-          list[0];
-
-        setSelectedProject(first);
+        setSelectedProject(list[0]);
 
         await loadSecurity(
-          first.id
+          list[0].id
         );
       }
-
     } catch (error) {
-
       console.error(error);
-
       setError(error.message);
-
     } finally {
-
       setLoading(false);
-
     }
   }
 
   async function loadSecurity(projectId) {
-
     try {
-
-      const response = await fetch(
-        `${API_URL}/projects/${projectId}/security`
-      );
+      const response =
+        await apiFetch(
+          `${API_URL}/projects/${projectId}/security`
+        );
 
       if (!response.ok) {
         throw new Error(
@@ -996,20 +1155,16 @@ function SecurityPage() {
         await response.json();
 
       setSecurity(data);
-
     } catch (error) {
-
       console.error(error);
-
       setSecurity(null);
-
       setError(error.message);
-
     }
   }
 
-  async function handleProjectChange(event) {
-
+  async function handleProjectChange(
+    event
+  ) {
     const projectId =
       Number(event.target.value);
 
@@ -1019,43 +1174,35 @@ function SecurityPage() {
           item.id === projectId
       );
 
-    if (!project) {
-      return;
-    }
+    if (!project) return;
 
     setSelectedProject(project);
 
-    await loadSecurity(
-      project.id
-    );
+    await loadSecurity(project.id);
   }
 
   async function runScan() {
-
-    if (!selectedProject) {
-      return;
-    }
+    if (!selectedProject) return;
 
     try {
-
       setScanning(true);
       setError("");
 
-      const response = await fetch(
-        `${API_URL}/projects/${selectedProject.id}/scan`,
-        {
-          method: "POST",
-        }
-      );
+      const response =
+        await apiFetch(
+          `${API_URL}/projects/${selectedProject.id}/scan`,
+          {
+            method: "POST",
+          }
+        );
 
       const data =
         await response.json();
 
       if (!response.ok) {
-
         throw new Error(
           data.detail ||
-          "Security scan failed."
+            "Security scan failed."
         );
       }
 
@@ -1064,66 +1211,45 @@ function SecurityPage() {
       );
 
       await loadProjects();
-
     } catch (error) {
-
       console.error(error);
-
       setError(error.message);
-
     } finally {
-
       setScanning(false);
-
     }
   }
 
   if (loading) {
-
     return (
       <main className="page">
-
         <div className="empty">
-
           <div className="empty-icon">
             🔄
           </div>
 
           <h3>
-            Loading security data...
+            Loading security...
           </h3>
-
         </div>
-
       </main>
     );
   }
 
   if (projects.length === 0) {
-
     return (
       <main className="page">
-
         <div className="page-heading">
-
           <div>
-
-            <h2>
-              Security
-            </h2>
+            <h2>Security</h2>
 
             <p>
               Analyze application security
             </p>
-
           </div>
-
         </div>
 
         <section className="card">
-
           <div className="empty">
-
             <div className="empty-icon">
               🔐
             </div>
@@ -1136,32 +1262,22 @@ function SecurityPage() {
               Create a project before running
               a security scan.
             </p>
-
           </div>
-
         </section>
-
       </main>
     );
   }
 
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
-          <h2>
-            Security
-          </h2>
+          <h2>Security</h2>
 
           <p>
             Analyze application security
           </p>
-
         </div>
-
       </div>
 
       {error && (
@@ -1171,9 +1287,7 @@ function SecurityPage() {
       )}
 
       <section className="card">
-
         <div className="field">
-
           <label>
             Select Project
           </label>
@@ -1186,34 +1300,22 @@ function SecurityPage() {
               handleProjectChange
             }
           >
-
-            {projects.map(
-              (project) => (
-
-                <option
-                  key={project.id}
-                  value={project.id}
-                >
-                  {project.name}
-                </option>
-
-              )
-            )}
-
+            {projects.map((project) => (
+              <option
+                key={project.id}
+                value={project.id}
+              >
+                {project.name}
+              </option>
+            ))}
           </select>
-
         </div>
-
       </section>
 
       {selectedProject && (
-
         <section className="card">
-
           <div className="card-header">
-
             <div>
-
               <h3>
                 {selectedProject.name}
               </h3>
@@ -1221,48 +1323,34 @@ function SecurityPage() {
               <p className="muted">
                 {selectedProject.repository}
               </p>
-
             </div>
 
             <span className="badge">
               {selectedProject.environment}
             </span>
-
           </div>
 
           <div className="security-project-info">
-
             <div>
-
-              <strong>
-                Branch
-              </strong>
+              <strong>Branch</strong>
 
               <span>
                 {selectedProject.branch}
               </span>
-
             </div>
 
             <div>
-
-              <strong>
-                Status
-              </strong>
+              <strong>Status</strong>
 
               <span>
                 {selectedProject.status}
               </span>
-
             </div>
-
           </div>
-
         </section>
       )}
 
       <div className="stat-grid">
-
         <StatCard
           icon="📄"
           title="Files Scanned"
@@ -1302,15 +1390,11 @@ function SecurityPage() {
               : "NOT SCANNED"
           }
         />
-
       </div>
 
       <section className="card">
-
         {!security?.scanned ? (
-
           <div className="empty">
-
             <div className="empty-icon">
               🔍
             </div>
@@ -1333,17 +1417,11 @@ function SecurityPage() {
                 ? "Scanning..."
                 : "🔍 Run Security Scan"}
             </button>
-
           </div>
-
         ) : (
-
           <div>
-
             <div className="card-header">
-
               <div>
-
                 <h3>
                   Security Analysis
                 </h3>
@@ -1351,7 +1429,6 @@ function SecurityPage() {
                 <p className="muted">
                   Scan completed successfully
                 </p>
-
               </div>
 
               <span
@@ -1364,19 +1441,16 @@ function SecurityPage() {
               >
                 {security.scan.risk_level}
               </span>
-
             </div>
 
-            {security.scan.findings_count === 0 ? (
-
+            {security.scan.findings_count ===
+            0 ? (
               <div className="security-success">
-
                 <div className="security-success-icon">
                   ✓
                 </div>
 
                 <div>
-
                   <h3>
                     No security findings detected
                   </h3>
@@ -1386,29 +1460,21 @@ function SecurityPage() {
                     identify potential exposed
                     credentials or secrets.
                   </p>
-
                 </div>
-
               </div>
-
             ) : (
-
               <div className="security-findings">
-
                 <h3>
                   Security Findings
                 </h3>
 
                 {security.scan.findings.map(
                   (finding, index) => (
-
                     <div
                       className="finding"
                       key={index}
                     >
-
                       <div>
-
                         <strong>
                           {finding.type}
                         </strong>
@@ -1418,22 +1484,18 @@ function SecurityPage() {
                         </p>
 
                         <small>
-                          File: {finding.file}
+                          File:{" "}
+                          {finding.file}
                         </small>
-
                       </div>
 
                       <span className="finding-severity">
                         {finding.severity}
                       </span>
-
                     </div>
-
                   )
                 )}
-
               </div>
-
             )}
 
             <button
@@ -1445,19 +1507,15 @@ function SecurityPage() {
                 ? "Scanning..."
                 : "🔄 Run Scan Again"}
             </button>
-
           </div>
-
         )}
-
       </section>
-
     </main>
   );
 }
 
 /* =========================================================
-   BUILD + CI/CD PAGE
+   BUILD / CI-CD
 ========================================================= */
 
 function BuildPage() {
@@ -1484,15 +1542,13 @@ function BuildPage() {
   }, []);
 
   async function loadProjects() {
-
     try {
-
       setLoading(true);
-      setError("");
 
-      const response = await fetch(
-        `${API_URL}/projects`
-      );
+      const response =
+        await apiFetch(
+          `${API_URL}/projects`
+        );
 
       if (!response.ok) {
         throw new Error(
@@ -1509,80 +1565,43 @@ function BuildPage() {
       setProjects(list);
 
       if (list.length > 0) {
-
-        setSelectedProject(
-          list[0]
-        );
-
+        setSelectedProject(list[0]);
       }
-
     } catch (error) {
-
       console.error(error);
-
-      setError(
-        error.message
-      );
-
+      setError(error.message);
     } finally {
-
       setLoading(false);
-
     }
-  }
-
-  async function handleProjectChange(event) {
-
-    const projectId =
-      Number(event.target.value);
-
-    const project =
-      projects.find(
-        (item) =>
-          item.id === projectId
-      );
-
-    if (!project) {
-      return;
-    }
-
-    setSelectedProject(project);
-    setBuildResult(null);
-    setError("");
   }
 
   async function runBuildCheck() {
-
-    if (!selectedProject) {
-      return;
-    }
+    if (!selectedProject) return;
 
     try {
-
       setChecking(true);
       setError("");
 
-      const response = await fetch(
-        `${API_URL}/projects/${selectedProject.id}/build-check`,
-        {
-          method: "POST",
-        }
-      );
+      const response =
+        await apiFetch(
+          `${API_URL}/projects/${selectedProject.id}/build-check`,
+          {
+            method: "POST",
+          }
+        );
 
       const data =
         await response.json();
 
       if (!response.ok) {
-
         throw new Error(
           data.detail ||
-          "Build check failed."
+            "Build check failed."
         );
       }
 
       setBuildResult(data);
 
-      // Refresh project status
       await loadProjects();
 
       setSelectedProject(
@@ -1594,32 +1613,34 @@ function BuildPage() {
               }
             : current
       );
-
     } catch (error) {
-
-      console.error(
-        "Build check error:",
-        error
-      );
-
-      setError(
-        error.message
-      );
-
+      console.error(error);
+      setError(error.message);
     } finally {
-
       setChecking(false);
-
     }
   }
 
-  if (loading) {
+  function handleProjectChange(event) {
+    const projectId =
+      Number(event.target.value);
 
+    const project =
+      projects.find(
+        (item) =>
+          item.id === projectId
+      );
+
+    if (!project) return;
+
+    setSelectedProject(project);
+    setBuildResult(null);
+  }
+
+  if (loading) {
     return (
       <main className="page">
-
         <div className="empty">
-
           <div className="empty-icon">
             🔄
           </div>
@@ -1627,20 +1648,15 @@ function BuildPage() {
           <h3>
             Loading build system...
           </h3>
-
         </div>
-
       </main>
     );
   }
 
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
           <h2>
             CI/CD Pipeline
           </h2>
@@ -1649,9 +1665,7 @@ function BuildPage() {
             Build and prepare your application
             for deployment
           </p>
-
         </div>
-
       </div>
 
       {error && (
@@ -1661,11 +1675,8 @@ function BuildPage() {
       )}
 
       {projects.length === 0 ? (
-
         <section className="card">
-
           <div className="empty">
-
             <div className="empty-icon">
               🏗️
             </div>
@@ -1678,20 +1689,12 @@ function BuildPage() {
               Create a project before checking
               build readiness.
             </p>
-
           </div>
-
         </section>
-
       ) : (
-
         <>
-          {/* PROJECT */}
-
           <section className="card">
-
             <div className="field">
-
               <label>
                 Select Project
               </label>
@@ -1704,30 +1707,22 @@ function BuildPage() {
                   handleProjectChange
                 }
               >
-
                 {projects.map(
                   (project) => (
-
                     <option
                       key={project.id}
                       value={project.id}
                     >
                       {project.name}
                     </option>
-
                   )
                 )}
-
               </select>
-
             </div>
 
             {selectedProject && (
-
               <div className="build-project">
-
                 <div>
-
                   <h3>
                     {selectedProject.name}
                   </h3>
@@ -1735,29 +1730,21 @@ function BuildPage() {
                   <p>
                     {selectedProject.repository}
                   </p>
-
                 </div>
 
                 <span className="badge">
                   {selectedProject.status}
                 </span>
-
               </div>
-
             )}
-
           </section>
 
-          {/* PIPELINE */}
-
           <section className="card">
-
             <h3 className="pipeline-title">
               Development Pipeline
             </h3>
 
             <div className="pipeline">
-
               <PipelineStage
                 number="1"
                 title="Source"
@@ -1769,12 +1756,7 @@ function BuildPage() {
                 number="2"
                 title="Security"
                 description="Security Analysis"
-                status={
-                  selectedProject?.status ===
-                  "Security Scanned"
-                    ? "COMPLETED"
-                    : "PENDING"
-                }
+                status="READY"
               />
 
               <PipelineStage
@@ -1814,19 +1796,12 @@ function BuildPage() {
                 description="Application Monitoring"
                 status="PENDING"
               />
-
             </div>
-
           </section>
 
-          {/* BUILD CHECK */}
-
           <section className="card">
-
             <div className="card-header">
-
               <div>
-
                 <h3>
                   Build Readiness
                 </h3>
@@ -1835,7 +1810,6 @@ function BuildPage() {
                   Check whether the repository
                   can be prepared for building.
                 </p>
-
               </div>
 
               <button
@@ -1847,36 +1821,27 @@ function BuildPage() {
                   ? "Checking..."
                   : "🏗️ Check Build"}
               </button>
-
             </div>
 
             {!buildResult ? (
-
               <div className="empty small">
-
                 <div className="empty-icon">
                   🏗️
                 </div>
 
                 <h3>
-                  Build check not run in this session
+                  Build check not run
                 </h3>
 
                 <p>
                   Click "Check Build" to analyze
                   the current GitHub repository.
                 </p>
-
               </div>
-
             ) : (
-
               <div>
-
                 <div className="build-summary">
-
                   <div className="build-status-box">
-
                     <span>
                       Build Status
                     </span>
@@ -1892,11 +1857,9 @@ function BuildPage() {
                         ? "✓ Build Ready"
                         : "✕ Not Ready"}
                     </strong>
-
                   </div>
 
                   <div className="build-status-box">
-
                     <span>
                       Total Files
                     </span>
@@ -1904,11 +1867,9 @@ function BuildPage() {
                     <strong>
                       {buildResult.total_files}
                     </strong>
-
                   </div>
 
                   <div className="build-status-box">
-
                     <span>
                       Frontend
                     </span>
@@ -1918,11 +1879,9 @@ function BuildPage() {
                         ? "✓ Detected"
                         : "Not detected"}
                     </strong>
-
                   </div>
 
                   <div className="build-status-box">
-
                     <span>
                       Backend
                     </span>
@@ -1932,11 +1891,9 @@ function BuildPage() {
                         ? "✓ Detected"
                         : "Not detected"}
                     </strong>
-
                   </div>
 
                   <div className="build-status-box">
-
                     <span>
                       Docker
                     </span>
@@ -1946,74 +1903,57 @@ function BuildPage() {
                         ? "✓ Available"
                         : "Not configured"}
                     </strong>
-
                   </div>
-
                 </div>
 
                 <div className="build-section">
-
                   <h3>
                     Detected Technologies
                   </h3>
 
                   <div className="technology-list">
-
                     {buildResult.project_types.map(
                       (technology) => (
-
                         <span
                           className="technology-tag"
                           key={technology}
                         >
                           {technology}
                         </span>
-
                       )
                     )}
-
                   </div>
-
                 </div>
 
                 <div className="build-section">
-
                   <h3>
                     Detected Files
                   </h3>
 
                   <div className="detected-files">
-
                     {buildResult.detected_files.map(
                       (file) => (
-
                         <div
                           key={file}
                           className="file-item"
                         >
                           📄 {file}
                         </div>
-
                       )
                     )}
-
                   </div>
-
                 </div>
 
                 <div className="next-stage">
-
                   <div>
-
                     <strong>
                       Next Stage
                     </strong>
 
                     <p>
-                      Docker containerization is the
-                      next step before deployment.
+                      Docker containerization is
+                      the next step.
                     </p>
-
                   </div>
 
                   <span
@@ -2027,18 +1967,12 @@ function BuildPage() {
                       ? "Docker Available"
                       : "Docker Not Configured"}
                   </span>
-
                 </div>
-
               </div>
-
             )}
-
           </section>
-
         </>
       )}
-
     </main>
   );
 }
@@ -2056,33 +1990,27 @@ function PipelineStage({
   let className =
     "pipeline-stage";
 
-  if (status === "COMPLETED") {
-    className += " completed";
-  }
-
-  if (status === "READY") {
+  if (
+    status === "READY" ||
+    status === "COMPLETED" ||
+    status === "AVAILABLE"
+  ) {
     className += " ready";
   }
 
   return (
     <div className={className}>
-
       <div className="pipeline-number">
         {number}
       </div>
 
-      <h3>
-        {title}
-      </h3>
+      <h3>{title}</h3>
 
-      <p>
-        {description}
-      </p>
+      <p>{description}</p>
 
       <span className="pipeline-status">
         {status}
       </span>
-
     </div>
   );
 }
@@ -2091,42 +2019,32 @@ function PipelineStage({
    DEPLOYMENTS
 ========================================================= */
 
-function DeploymentsPage({ setPage }) {
-
+function DeploymentsPage({
+  setPage,
+}) {
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
-          <h2>
-            Deployments
-          </h2>
+          <h2>Deployments</h2>
 
           <p>
             Deploy your created projects
           </p>
-
         </div>
-
       </div>
 
       <section className="card">
-
         <div className="card-header">
-
           <div>
-
             <h3>
               New Deployment
             </h3>
 
             <p className="muted">
-              Docker and CI/CD must be completed
-              before deployment.
+              Docker and CI/CD must be
+              completed before deployment.
             </p>
-
           </div>
 
           <button
@@ -2137,11 +2055,9 @@ function DeploymentsPage({ setPage }) {
           >
             ⚙️ Go to Pipeline
           </button>
-
         </div>
 
         <div className="empty">
-
           <div className="empty-icon">
             🚀
           </div>
@@ -2151,18 +2067,14 @@ function DeploymentsPage({ setPage }) {
           </h3>
 
           <p>
-            Complete Build and Docker stages
-            before deploying.
+            Complete Build and Docker
+            stages before deploying.
           </p>
-
         </div>
-
       </section>
 
       <section className="card">
-
         <div className="card-header">
-
           <h3>
             Deployment History
           </h3>
@@ -2170,11 +2082,9 @@ function DeploymentsPage({ setPage }) {
           <span className="badge">
             0 Deployments
           </span>
-
         </div>
 
         <div className="empty small">
-
           <div className="empty-icon">
             📋
           </div>
@@ -2182,11 +2092,8 @@ function DeploymentsPage({ setPage }) {
           <p>
             No deployment history yet.
           </p>
-
         </div>
-
       </section>
-
     </main>
   );
 }
@@ -2196,28 +2103,19 @@ function DeploymentsPage({ setPage }) {
 ========================================================= */
 
 function MonitoringPage() {
-
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
-          <h2>
-            Monitoring
-          </h2>
+          <h2>Monitoring</h2>
 
           <p>
             Monitor deployed applications
           </p>
-
         </div>
-
       </div>
 
       <div className="stat-grid">
-
         <StatCard
           icon="💻"
           title="CPU"
@@ -2241,13 +2139,10 @@ function MonitoringPage() {
           title="Health"
           value="—"
         />
-
       </div>
 
       <section className="card">
-
         <div className="empty">
-
           <div className="empty-icon">
             📈
           </div>
@@ -2257,14 +2152,11 @@ function MonitoringPage() {
           </h3>
 
           <p>
-            Monitoring will begin after a
-            successful deployment.
+            Monitoring will begin after
+            a successful deployment.
           </p>
-
         </div>
-
       </section>
-
     </main>
   );
 }
@@ -2274,30 +2166,20 @@ function MonitoringPage() {
 ========================================================= */
 
 function LogsPage() {
-
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
-          <h2>
-            Logs
-          </h2>
+          <h2>Logs</h2>
 
           <p>
             Application and deployment activity
           </p>
-
         </div>
-
       </div>
 
       <section className="card">
-
         <div className="empty">
-
           <div className="empty-icon">
             📋
           </div>
@@ -2307,14 +2189,11 @@ function LogsPage() {
           </h3>
 
           <p>
-            Logs will appear after builds and
-            deployments are implemented.
+            Logs will appear after builds
+            and deployments are implemented.
           </p>
-
         </div>
-
       </section>
-
     </main>
   );
 }
@@ -2324,30 +2203,20 @@ function LogsPage() {
 ========================================================= */
 
 function AlertsPage() {
-
   return (
     <main className="page">
-
       <div className="page-heading">
-
         <div>
-
-          <h2>
-            Alerts
-          </h2>
+          <h2>Alerts</h2>
 
           <p>
             Security, deployment and system alerts
           </p>
-
         </div>
-
       </div>
 
       <section className="card">
-
         <div className="empty">
-
           <div className="empty-icon">
             🔔
           </div>
@@ -2360,11 +2229,8 @@ function AlertsPage() {
             Alerts will appear when CloudGuard
             detects an issue.
           </p>
-
         </div>
-
       </section>
-
     </main>
   );
 }

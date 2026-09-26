@@ -1,6 +1,14 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Depends,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.security import (
+    HTTPBearer,
+    HTTPAuthorizationCredentials,
+)
+from pydantic import BaseModel, EmailStr
 
 import sqlite3
 import subprocess
@@ -8,6 +16,9 @@ import tempfile
 import os
 import re
 import json
+import secrets
+import hashlib
+
 from pathlib import Path
 from datetime import datetime
 
@@ -18,8 +29,8 @@ from datetime import datetime
 
 app = FastAPI(
     title="CloudGuard AI API",
-    version="5.0.0",
-    description="Cloud-Based Intelligent DevSecOps Platform",
+    version="7.0.0",
+    description="Intelligent DevSecOps Platform",
 )
 
 
@@ -37,6 +48,16 @@ app.add_middleware(
 
 
 # =========================================================
+# HTTP BEARER AUTHENTICATION
+# =========================================================
+
+# auto_error=False lets us create our own clear 401 message
+bearer_security = HTTPBearer(
+    auto_error=False
+)
+
+
+# =========================================================
 # DATABASE
 # =========================================================
 
@@ -49,12 +70,61 @@ def get_connection():
     return connection
 
 
+def column_exists(
+    connection,
+    table_name,
+    column_name,
+):
+    columns = connection.execute(
+        f"PRAGMA table_info({table_name})"
+    ).fetchall()
+
+    return any(
+        column["name"] == column_name
+        for column in columns
+    )
+
+
 def initialize_database():
+
     connection = get_connection()
+
+    # -----------------------------------------------------
+    # USERS
+    # -----------------------------------------------------
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
+    # -----------------------------------------------------
+    # SESSIONS
+    # -----------------------------------------------------
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT NOT NULL UNIQUE,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id)
+                REFERENCES users(id)
+        )
+        """
+    )
 
     # -----------------------------------------------------
     # PROJECTS
     # -----------------------------------------------------
+
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS projects (
@@ -70,8 +140,25 @@ def initialize_database():
     )
 
     # -----------------------------------------------------
+    # ADD user_id TO OLD PROJECT TABLE
+    # -----------------------------------------------------
+
+    if not column_exists(
+        connection,
+        "projects",
+        "user_id",
+    ):
+        connection.execute(
+            """
+            ALTER TABLE projects
+            ADD COLUMN user_id INTEGER
+            """
+        )
+
+    # -----------------------------------------------------
     # SECURITY SCANS
     # -----------------------------------------------------
+
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS security_scans (
@@ -101,11 +188,226 @@ initialize_database()
 # REQUEST MODELS
 # =========================================================
 
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class ProjectCreate(BaseModel):
     name: str
     repository: str
     branch: str = "main"
     environment: str = "Development"
+
+
+# =========================================================
+# PASSWORD HASHING
+# =========================================================
+
+def hash_password(password: str) -> str:
+
+    if len(password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Password must contain at least "
+                "6 characters."
+            ),
+        )
+
+    salt = secrets.token_bytes(16)
+
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        120000,
+    )
+
+    return (
+        salt.hex()
+        + ":"
+        + password_hash.hex()
+    )
+
+
+def verify_password(
+    password: str,
+    stored_hash: str,
+) -> bool:
+
+    try:
+
+        salt_hex, hash_hex = (
+            stored_hash.split(":")
+        )
+
+        salt = bytes.fromhex(
+            salt_hex
+        )
+
+        expected_hash = bytes.fromhex(
+            hash_hex
+        )
+
+        actual_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            120000,
+        )
+
+        return secrets.compare_digest(
+            actual_hash,
+            expected_hash,
+        )
+
+    except Exception:
+
+        return False
+
+
+# =========================================================
+# SESSION
+# =========================================================
+
+def create_session(user_id: int):
+
+    token = secrets.token_urlsafe(48)
+
+    connection = get_connection()
+
+    connection.execute(
+        """
+        INSERT INTO sessions
+        (
+            token,
+            user_id,
+            created_at
+        )
+        VALUES (?, ?, ?)
+        """,
+        (
+            token,
+            user_id,
+            datetime.now().isoformat(),
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    return token
+
+
+# =========================================================
+# GET CURRENT USER
+# =========================================================
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None =
+    Depends(bearer_security)
+):
+
+    if credentials is None:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required.",
+            headers={
+                "WWW-Authenticate": "Bearer"
+            },
+        )
+
+    token = credentials.credentials.strip()
+
+    if not token:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token.",
+            headers={
+                "WWW-Authenticate": "Bearer"
+            },
+        )
+
+    connection = get_connection()
+
+    row = connection.execute(
+        """
+        SELECT
+            users.id,
+            users.email
+        FROM sessions
+        JOIN users
+            ON users.id = sessions.user_id
+        WHERE sessions.token = ?
+        """,
+        (token,),
+    ).fetchone()
+
+    connection.close()
+
+    if row is None:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired or invalid.",
+            headers={
+                "WWW-Authenticate": "Bearer"
+            },
+        )
+
+    return row
+
+
+# =========================================================
+# PROJECT OWNERSHIP
+# =========================================================
+
+def require_project_owner(
+    project_id: int,
+    user_id: int,
+):
+
+    connection = get_connection()
+
+    project = connection.execute(
+        """
+        SELECT
+            id,
+            user_id,
+            name,
+            repository,
+            branch,
+            environment,
+            status,
+            created_at
+        FROM projects
+        WHERE id = ?
+        AND user_id = ?
+        """,
+        (
+            project_id,
+            user_id,
+        ),
+    ).fetchone()
+
+    connection.close()
+
+    if project is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found.",
+        )
+
+    return project
 
 
 # =========================================================
@@ -161,18 +463,6 @@ TEXT_EXTENSIONS = {
 }
 
 
-DEPENDENCY_FILES = {
-    "package.json",
-    "package-lock.json",
-    "requirements.txt",
-    "pyproject.toml",
-    "poetry.lock",
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-}
-
-
 DOCKER_FILES = {
     "Dockerfile",
     "docker-compose.yml",
@@ -190,10 +480,6 @@ SENSITIVE_FILENAMES = {
     "secret.json",
 }
 
-
-# =========================================================
-# SECURITY PATTERNS
-# =========================================================
 
 SECRET_PATTERNS = [
     (
@@ -265,9 +551,10 @@ SECRET_PATTERNS = [
 
 @app.get("/")
 def root():
+
     return {
         "message": "Welcome to CloudGuard AI API",
-        "version": "5.0.0",
+        "version": "7.0.0",
     }
 
 
@@ -277,6 +564,7 @@ def root():
 
 @app.get("/health")
 def health():
+
     return {
         "status": "healthy",
         "service": "CloudGuard AI Backend",
@@ -284,33 +572,256 @@ def health():
 
 
 # =========================================================
-# NORMALIZE GITHUB URL
+# REGISTER
 # =========================================================
 
-def normalize_repository_url(repository: str) -> str:
+@app.post("/register")
+def register(
+    request: RegisterRequest,
+):
+
+    email = request.email.strip().lower()
+
+    if len(request.password) < 6:
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Password must contain at least "
+                "6 characters."
+            ),
+        )
+
+    connection = get_connection()
+
+    existing = connection.execute(
+        """
+        SELECT id
+        FROM users
+        WHERE LOWER(email) = LOWER(?)
+        """,
+        (email,),
+    ).fetchone()
+
+    if existing:
+
+        connection.close()
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "An account with this email "
+                "already exists."
+            ),
+        )
+
+    created_at = datetime.now().isoformat()
+
+    password_hash = hash_password(
+        request.password
+    )
+
+    cursor = connection.execute(
+        """
+        INSERT INTO users
+        (
+            email,
+            password_hash,
+            created_at
+        )
+        VALUES (?, ?, ?)
+        """,
+        (
+            email,
+            password_hash,
+            created_at,
+        ),
+    )
+
+    user_id = cursor.lastrowid
+
+    # -----------------------------------------------------
+    # IMPORTANT:
+    # Existing projects created before authentication
+    # have NULL user_id.
+    #
+    # The first account becomes the owner of those
+    # orphan projects.
+    # -----------------------------------------------------
+
+    connection.execute(
+        """
+        UPDATE projects
+        SET user_id = ?
+        WHERE user_id IS NULL
+        """,
+        (user_id,),
+    )
+
+    connection.commit()
+    connection.close()
+
+    token = create_session(
+        user_id
+    )
+
+    return {
+        "message": "Account created successfully.",
+        "token": token,
+        "user": {
+            "id": user_id,
+            "email": email,
+        },
+    }
+
+
+# =========================================================
+# LOGIN
+# =========================================================
+
+@app.post("/login")
+def login(
+    request: LoginRequest,
+):
+
+    email = request.email.strip().lower()
+
+    connection = get_connection()
+
+    user = connection.execute(
+        """
+        SELECT
+            id,
+            email,
+            password_hash
+        FROM users
+        WHERE LOWER(email) = LOWER(?)
+        """,
+        (email,),
+    ).fetchone()
+
+    connection.close()
+
+    if user is None:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password.",
+        )
+
+    if not verify_password(
+        request.password,
+        user["password_hash"],
+    ):
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password.",
+        )
+
+    token = create_session(
+        user["id"]
+    )
+
+    return {
+        "message": "Login successful.",
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+        },
+    }
+
+
+# =========================================================
+# CURRENT USER
+# =========================================================
+
+@app.get("/me")
+def me(
+    user=Depends(get_current_user)
+):
+
+    return {
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+        }
+    }
+
+
+# =========================================================
+# LOGOUT
+# =========================================================
+
+@app.post("/logout")
+def logout(
+    credentials:
+        HTTPAuthorizationCredentials | None =
+        Depends(bearer_security)
+):
+
+    if credentials is None:
+
+        return {
+            "message": "Already logged out."
+        }
+
+    token = credentials.credentials.strip()
+
+    connection = get_connection()
+
+    connection.execute(
+        """
+        DELETE FROM sessions
+        WHERE token = ?
+        """,
+        (token,),
+    )
+
+    connection.commit()
+    connection.close()
+
+    return {
+        "message": "Logged out successfully."
+    }
+
+
+# =========================================================
+# NORMALIZE REPOSITORY URL
+# =========================================================
+
+def normalize_repository_url(
+    repository: str,
+):
 
     value = repository.strip()
 
-    if not value:
-        return value
+    if value.startswith(
+        "github.com/"
+    ):
 
-    if value.startswith("github.com/"):
-        value = "https://" + value
+        value = (
+            "https://" + value
+        )
 
     value = value.rstrip("/")
 
     if value.endswith(".git"):
+
         value = value[:-4]
 
     return value
 
 
 # =========================================================
-# GET ALL PROJECTS
+# GET PROJECTS
 # =========================================================
 
 @app.get("/projects")
-def get_projects():
+def get_projects(
+    user=Depends(get_current_user)
+):
 
     connection = get_connection()
 
@@ -325,8 +836,10 @@ def get_projects():
             status,
             created_at
         FROM projects
+        WHERE user_id = ?
         ORDER BY id DESC
-        """
+        """,
+        (user["id"],),
     ).fetchall()
 
     connection.close()
@@ -347,28 +860,37 @@ def get_projects():
 # =========================================================
 
 @app.post("/projects")
-def create_project(project: ProjectCreate):
+def create_project(
+    project: ProjectCreate,
+    user=Depends(get_current_user),
+):
 
     name = project.name.strip()
+
     repository = normalize_repository_url(
         project.repository
     )
+
     branch = project.branch.strip()
+
     environment = project.environment.strip()
 
     if not name:
+
         raise HTTPException(
             status_code=400,
             detail="Project name is required.",
         )
 
     if not repository:
+
         raise HTTPException(
             status_code=400,
             detail="Repository URL is required.",
         )
 
     if not branch:
+
         raise HTTPException(
             status_code=400,
             detail="Branch is required.",
@@ -377,9 +899,13 @@ def create_project(project: ProjectCreate):
     if not repository.startswith(
         "https://github.com/"
     ):
+
         raise HTTPException(
             status_code=400,
-            detail="Please provide a valid GitHub repository URL.",
+            detail=(
+                "Please provide a valid GitHub "
+                "repository URL."
+            ),
         )
 
     connection = get_connection()
@@ -388,17 +914,25 @@ def create_project(project: ProjectCreate):
         """
         SELECT id
         FROM projects
-        WHERE LOWER(repository) = LOWER(?)
+        WHERE user_id = ?
+        AND LOWER(repository) = LOWER(?)
         """,
-        (repository,),
+        (
+            user["id"],
+            repository,
+        ),
     ).fetchone()
 
     if existing:
+
         connection.close()
 
         raise HTTPException(
             status_code=409,
-            detail="This repository is already added.",
+            detail=(
+                "This repository is already "
+                "added to your account."
+            ),
         )
 
     created_at = datetime.now().isoformat()
@@ -407,6 +941,7 @@ def create_project(project: ProjectCreate):
         """
         INSERT INTO projects
         (
+            user_id,
             name,
             repository,
             branch,
@@ -414,9 +949,10 @@ def create_project(project: ProjectCreate):
             status,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            user["id"],
             name,
             repository,
             branch,
@@ -442,8 +978,12 @@ def create_project(project: ProjectCreate):
             created_at
         FROM projects
         WHERE id = ?
+        AND user_id = ?
         """,
-        (project_id,),
+        (
+            project_id,
+            user["id"],
+        ),
     ).fetchone()
 
     connection.close()
@@ -459,36 +999,18 @@ def create_project(project: ProjectCreate):
 # =========================================================
 
 @app.get("/projects/{project_id}")
-def get_project(project_id: int):
+def get_project(
+    project_id: int,
+    user=Depends(get_current_user),
+):
 
-    connection = get_connection()
-
-    row = connection.execute(
-        """
-        SELECT
-            id,
-            name,
-            repository,
-            branch,
-            environment,
-            status,
-            created_at
-        FROM projects
-        WHERE id = ?
-        """,
-        (project_id,),
-    ).fetchone()
-
-    connection.close()
-
-    if row is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found.",
-        )
+    project = require_project_owner(
+        project_id,
+        user["id"],
+    )
 
     return {
-        "project": dict(row)
+        "project": dict(project)
     }
 
 
@@ -501,6 +1023,7 @@ def clone_repository(
     branch: str,
     target_path: str,
 ):
+
     command = [
         "git",
         "clone",
@@ -513,6 +1036,7 @@ def clone_repository(
     ]
 
     try:
+
         result = subprocess.run(
             command,
             capture_output=True,
@@ -521,23 +1045,24 @@ def clone_repository(
         )
 
     except subprocess.TimeoutExpired:
+
         raise RuntimeError(
             "Repository clone timed out."
         )
 
     except FileNotFoundError:
+
         raise RuntimeError(
             "Git was not found on this computer."
         )
 
     if result.returncode != 0:
-        error_message = (
+
+        raise RuntimeError(
             result.stderr.strip()
             or result.stdout.strip()
             or "Repository clone failed."
         )
-
-        raise RuntimeError(error_message)
 
 
 # =========================================================
@@ -577,35 +1102,48 @@ def scan_repository(
 
             for filename in files:
 
-                file_path = Path(root) / filename
+                file_path = (
+                    Path(root) / filename
+                )
 
                 try:
+
                     relative_path = (
                         file_path.relative_to(
                             repository_path
                         )
                     )
+
                 except ValueError:
+
                     continue
 
-                relative_path_string = str(
+                relative_string = str(
                     relative_path
                 )
 
-                # Sensitive filenames
+                # -----------------------------------------
+                # SENSITIVE FILE
+                # -----------------------------------------
+
                 if filename.lower() in {
                     item.lower()
                     for item in SENSITIVE_FILENAMES
                 }:
+
                     findings.append(
                         {
-                            "type": "Sensitive File",
-                            "severity": "HIGH",
-                            "file": relative_path_string,
-                            "message": (
-                                "Sensitive configuration "
-                                "file detected."
-                            ),
+                            "type":
+                                "Sensitive File",
+                            "severity":
+                                "HIGH",
+                            "file":
+                                relative_string,
+                            "message":
+                                (
+                                    "Sensitive configuration "
+                                    "file detected."
+                                ),
                         }
                     )
 
@@ -614,12 +1152,13 @@ def scan_repository(
                 )
 
                 if extension not in TEXT_EXTENSIONS:
+
                     continue
 
                 try:
-                    file_size = file_path.stat().st_size
 
-                    if file_size > 1_000_000:
+                    if file_path.stat().st_size > 1_000_000:
+
                         continue
 
                     content = file_path.read_text(
@@ -630,7 +1169,12 @@ def scan_repository(
                     files_scanned += 1
 
                 except Exception:
+
                     continue
+
+                # -----------------------------------------
+                # SECRET CHECK
+                # -----------------------------------------
 
                 for (
                     finding_type,
@@ -642,18 +1186,26 @@ def scan_repository(
 
                         findings.append(
                             {
-                                "type": finding_type,
-                                "severity": severity,
-                                "file": relative_path_string,
-                                "message": (
-                                    "Potential credential "
-                                    "or secret detected."
-                                ),
+                                "type":
+                                    finding_type,
+                                "severity":
+                                    severity,
+                                "file":
+                                    relative_string,
+                                "message":
+                                    (
+                                        "Potential credential "
+                                        "or secret detected."
+                                    ),
                             }
                         )
 
-    # Remove duplicate findings
+    # ---------------------------------------------
+    # REMOVE DUPLICATES
+    # ---------------------------------------------
+
     unique_findings = []
+
     seen = set()
 
     for finding in findings:
@@ -665,8 +1217,12 @@ def scan_repository(
         )
 
         if key not in seen:
+
             seen.add(key)
-            unique_findings.append(finding)
+
+            unique_findings.append(
+                finding
+            )
 
     findings = unique_findings
 
@@ -688,30 +1244,36 @@ def scan_repository(
         if item["severity"] == "LOW"
     )
 
-    risk_score = (
+    risk_score = min(
+        100,
         high_count * 25
         + medium_count * 10
-        + low_count * 2
-    )
-
-    risk_score = min(
-        risk_score,
-        100,
+        + low_count * 2,
     )
 
     if risk_score == 0:
+
         risk_level = "LOW"
+
     elif risk_score < 40:
+
         risk_level = "MEDIUM"
+
     else:
+
         risk_level = "HIGH"
 
     return {
-        "files_scanned": files_scanned,
-        "findings_count": len(findings),
-        "findings": findings,
-        "risk_score": risk_score,
-        "risk_level": risk_level,
+        "files_scanned":
+            files_scanned,
+        "findings_count":
+            len(findings),
+        "findings":
+            findings,
+        "risk_score":
+            risk_score,
+        "risk_level":
+            risk_level,
     }
 
 
@@ -720,31 +1282,17 @@ def scan_repository(
 # =========================================================
 
 @app.post("/projects/{project_id}/scan")
-def run_security_scan(project_id: int):
+def run_security_scan(
+    project_id: int,
+    user=Depends(get_current_user),
+):
+
+    project = require_project_owner(
+        project_id,
+        user["id"],
+    )
 
     connection = get_connection()
-
-    project = connection.execute(
-        """
-        SELECT
-            id,
-            name,
-            repository,
-            branch,
-            environment
-        FROM projects
-        WHERE id = ?
-        """,
-        (project_id,),
-    ).fetchone()
-
-    if project is None:
-        connection.close()
-
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found.",
-        )
 
     connection.execute(
         """
@@ -821,14 +1369,21 @@ def run_security_scan(project_id: int):
         connection.commit()
 
         return {
-            "message": "Security scan completed.",
-            "project_id": project_id,
-            "project_name": project["name"],
-            "repository": project["repository"],
-            "branch": project["branch"],
-            "status": "Completed",
+            "message":
+                "Security scan completed.",
+            "project_id":
+                project_id,
+            "project_name":
+                project["name"],
+            "repository":
+                project["repository"],
+            "branch":
+                project["branch"],
+            "status":
+                "Completed",
             **result,
-            "scanned_at": scanned_at,
+            "scanned_at":
+                scanned_at,
         }
 
     except Exception as error:
@@ -853,40 +1408,26 @@ def run_security_scan(project_id: int):
         )
 
     finally:
+
         connection.close()
 
 
 # =========================================================
-# GET PROJECT SECURITY
+# GET SECURITY RESULT
 # =========================================================
 
 @app.get("/projects/{project_id}/security")
-def get_project_security(project_id: int):
+def get_project_security(
+    project_id: int,
+    user=Depends(get_current_user),
+):
+
+    project = require_project_owner(
+        project_id,
+        user["id"],
+    )
 
     connection = get_connection()
-
-    project = connection.execute(
-        """
-        SELECT
-            id,
-            name,
-            repository,
-            branch,
-            environment,
-            status
-        FROM projects
-        WHERE id = ?
-        """,
-        (project_id,),
-    ).fetchone()
-
-    if project is None:
-        connection.close()
-
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found.",
-        )
 
     scan = connection.execute(
         """
@@ -912,32 +1453,46 @@ def get_project_security(project_id: int):
     if scan is None:
 
         return {
-            "project": dict(project),
-            "scanned": False,
-            "message": (
-                "Security scan has not been performed."
-            ),
+            "project":
+                dict(project),
+            "scanned":
+                False,
+            "message":
+                "Security scan has not been performed.",
         }
 
     try:
+
         findings = json.loads(
             scan["findings"]
         )
+
     except Exception:
+
         findings = []
 
     return {
-        "project": dict(project),
-        "scanned": True,
+        "project":
+            dict(project),
+        "scanned":
+            True,
         "scan": {
-            "id": scan["id"],
-            "status": scan["status"],
-            "risk_score": scan["risk_score"],
-            "risk_level": scan["risk_level"],
-            "files_scanned": scan["files_scanned"],
-            "findings_count": scan["findings_count"],
-            "findings": findings,
-            "scanned_at": scan["scanned_at"],
+            "id":
+                scan["id"],
+            "status":
+                scan["status"],
+            "risk_score":
+                scan["risk_score"],
+            "risk_level":
+                scan["risk_level"],
+            "files_scanned":
+                scan["files_scanned"],
+            "findings_count":
+                scan["findings_count"],
+            "findings":
+                findings,
+            "scanned_at":
+                scan["scanned_at"],
         },
     }
 
@@ -947,7 +1502,9 @@ def get_project_security(project_id: int):
 # =========================================================
 
 @app.get("/security")
-def security_summary():
+def security_summary(
+    user=Depends(get_current_user),
+):
 
     connection = get_connection()
 
@@ -956,74 +1513,69 @@ def security_summary():
         SELECT
             COUNT(*) AS total_scans,
             COALESCE(
-                SUM(findings_count),
+                SUM(security_scans.findings_count),
                 0
             ) AS total_findings,
-            MAX(risk_score) AS highest_risk
+            MAX(
+                security_scans.risk_score
+            ) AS highest_risk
         FROM security_scans
-        """
+        JOIN projects
+            ON projects.id =
+               security_scans.project_id
+        WHERE projects.user_id = ?
+        """,
+        (user["id"],),
     ).fetchone()
 
     connection.close()
 
-    total_scans = (
-        result["total_scans"] or 0
-    )
-
-    total_findings = (
-        result["total_findings"] or 0
-    )
-
     highest_risk = result["highest_risk"]
 
     if highest_risk is None:
+
         risk_level = "NOT_SCANNED"
+
     elif highest_risk == 0:
+
         risk_level = "LOW"
+
     elif highest_risk < 40:
+
         risk_level = "MEDIUM"
+
     else:
+
         risk_level = "HIGH"
 
     return {
-        "total_scans": total_scans,
-        "security_issues": total_findings,
-        "risk_score": highest_risk,
-        "risk_level": risk_level,
+        "total_scans":
+            result["total_scans"] or 0,
+        "security_issues":
+            result["total_findings"] or 0,
+        "risk_score":
+            highest_risk,
+        "risk_level":
+            risk_level,
     }
 
 
 # =========================================================
-# BUILD READINESS CHECK
+# BUILD CHECK
 # =========================================================
 
 @app.post("/projects/{project_id}/build-check")
-def build_check(project_id: int):
+def build_check(
+    project_id: int,
+    user=Depends(get_current_user),
+):
+
+    project = require_project_owner(
+        project_id,
+        user["id"],
+    )
 
     connection = get_connection()
-
-    project = connection.execute(
-        """
-        SELECT
-            id,
-            name,
-            repository,
-            branch,
-            environment,
-            status
-        FROM projects
-        WHERE id = ?
-        """,
-        (project_id,),
-    ).fetchone()
-
-    if project is None:
-        connection.close()
-
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found.",
-        )
 
     try:
 
@@ -1034,19 +1586,11 @@ def build_check(project_id: int):
                 "repository",
             )
 
-            # -------------------------------------------------
-            # CLONE FULL REPOSITORY
-            # -------------------------------------------------
-
             clone_repository(
                 project["repository"],
                 project["branch"],
                 repository_path,
             )
-
-            # -------------------------------------------------
-            # DETECT PROJECT TYPES
-            # -------------------------------------------------
 
             project_types = set()
 
@@ -1075,10 +1619,6 @@ def build_check(project_id: int):
             frontend_detected = False
             backend_detected = False
 
-            # -------------------------------------------------
-            # WALK THROUGH ENTIRE REPOSITORY
-            # -------------------------------------------------
-
             for root, directories, files in os.walk(
                 repository_path
             ):
@@ -1098,21 +1638,20 @@ def build_check(project_id: int):
                     )
 
                     try:
+
                         relative_path = (
                             file_path.relative_to(
                                 repository_path
                             )
                         )
+
                     except ValueError:
+
                         continue
 
                     relative_string = str(
                         relative_path
                     )
-
-                    # -----------------------------------------
-                    # IMPORTANT FILE
-                    # -----------------------------------------
 
                     if filename in important_files:
 
@@ -1120,19 +1659,11 @@ def build_check(project_id: int):
                             relative_string
                         )
 
-                    # -----------------------------------------
-                    # DOCKER FILE
-                    # -----------------------------------------
-
                     if filename in DOCKER_FILES:
 
                         docker_files.append(
                             relative_string
                         )
-
-                    # -----------------------------------------
-                    # CHECK FRONTEND / BACKEND DIRECTORIES
-                    # -----------------------------------------
 
                     path_parts = set(
                         relative_path.parts
@@ -1146,10 +1677,7 @@ def build_check(project_id: int):
 
                         backend_detected = True
 
-                    # -----------------------------------------
-                    # NODE.JS / REACT
-                    # -----------------------------------------
-
+                    # Node
                     if filename == "package.json":
 
                         project_types.add(
@@ -1198,12 +1726,10 @@ def build_check(project_id: int):
                                 )
 
                         except Exception:
+
                             pass
 
-                    # -----------------------------------------
-                    # PYTHON
-                    # -----------------------------------------
-
+                    # Python
                     if filename in {
                         "requirements.txt",
                         "pyproject.toml",
@@ -1220,10 +1746,7 @@ def build_check(project_id: int):
                             "Python"
                         )
 
-                    # -----------------------------------------
-                    # JAVASCRIPT / TYPESCRIPT
-                    # -----------------------------------------
-
+                    # JavaScript
                     if file_path.suffix.lower() in {
                         ".js",
                         ".jsx",
@@ -1234,10 +1757,6 @@ def build_check(project_id: int):
                         project_types.add(
                             "JavaScript"
                         )
-
-            # -------------------------------------------------
-            # ADD ARCHITECTURE TYPES
-            # -------------------------------------------------
 
             if frontend_detected:
 
@@ -1251,34 +1770,20 @@ def build_check(project_id: int):
                     "Backend Application"
                 )
 
-            # -------------------------------------------------
-            # DOCKER
-            # -------------------------------------------------
-
             docker_available = (
                 len(docker_files) > 0
             )
-
-            # -------------------------------------------------
-            # BUILD READINESS
-            # -------------------------------------------------
 
             build_ready = (
                 len(project_types) > 0
                 and total_files > 0
             )
 
-            if build_ready:
-
-                new_status = "Build Ready"
-
-            else:
-
-                new_status = "Build Not Ready"
-
-            # -------------------------------------------------
-            # UPDATE DATABASE
-            # -------------------------------------------------
+            new_status = (
+                "Build Ready"
+                if build_ready
+                else "Build Not Ready"
+            )
 
             connection.execute(
                 """
@@ -1297,46 +1802,32 @@ def build_check(project_id: int):
             return {
                 "message":
                     "Build readiness check completed.",
-
                 "project_id":
                     project["id"],
-
                 "project_name":
                     project["name"],
-
                 "repository":
                     project["repository"],
-
                 "branch":
                     project["branch"],
-
                 "environment":
                     project["environment"],
-
                 "project_types":
                     sorted(project_types),
-
                 "build_ready":
                     build_ready,
-
                 "docker_available":
                     docker_available,
-
                 "docker_files":
                     sorted(docker_files),
-
                 "detected_files":
                     sorted(detected_files),
-
                 "total_files":
                     total_files,
-
                 "frontend_detected":
                     frontend_detected,
-
                 "backend_detected":
                     backend_detected,
-
                 "status":
                     new_status,
             }
@@ -1363,16 +1854,18 @@ def build_check(project_id: int):
         )
 
     finally:
+
         connection.close()
 
 
 # =========================================================
 # DEPLOYMENTS
 # =========================================================
-# Real deployment will be added after Build + Docker.
 
 @app.get("/deployments")
-def get_deployments():
+def get_deployments(
+    user=Depends(get_current_user),
+):
 
     return {
         "total_deployments": 0,
@@ -1386,7 +1879,9 @@ def get_deployments():
 # =========================================================
 
 @app.get("/monitoring")
-def get_monitoring():
+def get_monitoring(
+    user=Depends(get_current_user),
+):
 
     return {
         "cpu_usage": None,
@@ -1411,5 +1906,6 @@ def startup():
     print("API  : http://127.0.0.1:8000")
     print("Docs : http://127.0.0.1:8000/docs")
     print("DB   : cloudguard.db")
+    print("Auth : HTTP Bearer ENABLED")
     print("============================================")
     print("")
